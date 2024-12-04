@@ -3,28 +3,9 @@ const jwt = require('jsonwebtoken');
 const express = require('express');
 const router = express.Router();
 const bdd = require('../bdd');
+const auth = require('../middleware/auth');
 
-
-const authentification = (req, res, next) => {
-    const token = req.headers['authorization'];
-    
-    if (token) {
-        jwt.verify(token.split(' ')[1], 'secretkey', (error, decode) => {
-            if (error) {
-                console.log('Erreur de vérification du token:', error);
-                return res.status(401).send('token incorrect');
-            } else {
-                req.userId = decode.id;
-                req.userMail = decode.email;
-                next();
-            }
-        });
-    } else {
-        res.status(401).send('aucun token');
-    }
-};
-
-router.post('/addTask',authentification, (req, res) => {
+router.post('/addTask',auth.authentification, (req, res) => {
     
     const { libelle, description, etat } = req.body;
     const sql = 'INSERT INTO tasks (libelle, description, etat, user) VALUES (?, ?, ?, ?)';
@@ -34,16 +15,22 @@ router.post('/addTask',authentification, (req, res) => {
     });
 });
 
-router.get('/tasks', (req, res) => {
-    const sql = 'SELECT * FROM tasks';
+router.get('/tasks',auth.authentification, (req, res) => {
+    let sql = "";
 
-    bdd.query(sql, (err, results) => {
+    if (req.role == "admin") {
+        sql = 'SELECT * FROM tasks LEFT JOIN users ON idUser=user ;';
+    }else{
+        sql = 'SELECT * FROM tasks where user = ?;';
+    }
+
+    bdd.query(sql,[req.userId], (err, results) => {
         if (err) throw err;
         res.json(results);
     });
 });
 
-router.put('/tasks/:id', authentification, (req, res) => {
+router.put('/tasks/:id', auth.authentification, (req, res) => {
     const { title, description, completed } = req.body;
     const sql = 'UPDATE tasks SET title = ?, description = ?, completed = ? WHERE id = ? AND user_id = ?';
     bdd.query(sql, [title, description, completed, req.params.id, req.userId], (err, result) => {
@@ -52,7 +39,7 @@ router.put('/tasks/:id', authentification, (req, res) => {
     });
 });
 
-router.delete('/tasks/:id', authentification, (req, res) => {
+router.delete('/tasks/:id', auth.authentification, (req, res) => {
     const sql = 'DELETE FROM tasks WHERE id = ? AND user_id = ?';
     bdd.query(sql, [req.params.id, req.userId], (err, result) => {
         if (err) throw err;
